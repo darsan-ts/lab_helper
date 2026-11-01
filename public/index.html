@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VS Code Web - Server Connected Edition</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Prism.js Syntax Highlighting CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        vscode: {
+                            activity: '#333333',
+                            sidebar: '#252526',
+                            activeTab: '#1e1e1e',
+                            inactiveTab: '#2d2d2d',
+                            editor: '#1e1e1e',
+                            statusBar: '#007acc',
+                            border: '#3c3c3c',
+                            text: '#cccccc',
+                            hover: '#37373d',
+                            selected: '#094771'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: #1e1e1e; }
+        ::-webkit-scrollbar-thumb { background: #424242; }
+        ::-webkit-scrollbar-thumb:hover { background: #4f4f4f; }
+        
+        .editor-container {
+            position: relative;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .code-input, .code-highlight {
+            margin: 0;
+            padding: 10px;
+            border: 0;
+            width: 100%;
+            height: 100%;
+            tab-size: 4;
+            white-space: pre;
+            word-wrap: normal;
+            overflow: auto;
+            font-family: inherit;
+            font-size: inherit;
+            line-height: inherit;
+        }
+
+        .code-input {
+            position: absolute;
+            top: 0; left: 0;
+            color: transparent;
+            background: transparent;
+            caret-color: #aeafad;
+            resize: none;
+            outline: none;
+            z-index: 2;
+        }
+
+        .code-highlight {
+            position: absolute;
+            top: 0; left: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .line-numbers {
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="h-full bg-vscode-editor text-vscode-text overflow-hidden select-none flex flex-col">
+
+    <!-- TOP TITLE BAR -->
+    <header class="h-9 bg-[#3c3c3c] flex items-center justify-between px-3 border-b border-[#2b2b2b] text-xs text-gray-300">
+        <div class="flex items-center space-x-2">
+            <i class="fa-brands fa-visual-studio text-blue-400 text-sm"></i>
+            <span id="window-title">VS Code Server Editor</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button id="save-btn" title="Save File to Server (Ctrl+S)" class="hover:bg-blue-600 flex items-center gap-1 bg-[#0e639c] px-3 py-1 rounded text-white font-medium">
+                <i class="fa-solid fa-floppy-disk"></i> Save to Server
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN BODY SECTION -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- ACTIVITY BAR (LEFT) -->
+        <aside class="w-12 bg-vscode-activity flex flex-col items-center py-2 space-y-4 border-r border-vscode-border flex-shrink-0">
+            <button title="Explorer" class="text-white text-lg p-2 hover:bg-[#464646] rounded w-10 h-10 flex items-center justify-center">
+                <i class="fa-solid fa-copy"></i>
+            </button>
+            <button id="btn-new-file" title="New File" class="text-gray-400 hover:text-white text-lg p-2 hover:bg-[#464646] rounded w-10 h-10 flex items-center justify-center">
+                <i class="fa-solid fa-file-circle-plus"></i>
+            </button>
+            <button id="btn-refresh" title="Refresh Directory" class="text-gray-400 hover:text-white text-lg p-2 hover:bg-[#464646] rounded w-10 h-10 flex items-center justify-center">
+                <i class="fa-solid fa-rotate-right"></i>
+            </button>
+        </aside>
+
+        <!-- SIDEBAR / FILE EXPLORER -->
+        <aside class="w-60 bg-vscode-sidebar flex flex-col border-r border-vscode-border flex-shrink-0">
+            <div class="h-9 px-4 flex items-center justify-between text-xs font-bold tracking-wider text-gray-400 uppercase border-b border-vscode-border">
+                <span>Server Files (/files)</span>
+                <div class="flex space-x-2">
+                    <button id="explorer-new-btn" title="New File" class="hover:text-white"><i class="fa-solid fa-plus"></i></button>
+                    <button id="explorer-refresh-btn" title="Refresh" class="hover:text-white"><i class="fa-solid fa-arrows-rotate"></i></button>
+                </div>
+            </div>
+
+            <!-- FILE TREE -->
+            <div id="file-list" class="flex-1 overflow-y-auto py-2 text-sm">
+                <!-- Server files rendered here -->
+            </div>
+        </aside>
+
+        <!-- EDITOR & WORKSPACE PANE -->
+        <main class="flex-1 flex flex-col bg-vscode-editor overflow-hidden">
+            
+            <!-- TAB BAR -->
+            <div id="tab-bar" class="h-9 bg-vscode-inactiveTab flex items-center border-b border-vscode-border overflow-x-auto flex-shrink-0">
+                <!-- Dynamic tabs -->
+            </div>
+
+            <!-- EDITOR AREA -->
+            <div id="editor-wrapper" class="flex-1 flex overflow-hidden relative">
+                <!-- Line Numbers -->
+                <div id="line-numbers" class="w-12 bg-vscode-editor text-gray-500 text-right pr-3 pt-2 select-none border-r border-vscode-border line-numbers overflow-hidden">
+                    1
+                </div>
+
+                <!-- Code Input & Highlight Layer -->
+                <div class="flex-1 relative overflow-hidden editor-container">
+                    <pre class="code-highlight"><code id="code-display" class="language-plaintext"></code></pre>
+                    <textarea id="code-editor" class="code-input" spellcheck="false" placeholder="Select or create a file to start editing..."></textarea>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- STATUS BAR (BOTTOM) -->
+    <footer class="h-6 bg-vscode-statusBar text-white text-xs flex items-center justify-between px-3 z-10 flex-shrink-0">
+        <div class="flex items-center space-x-4">
+            <span class="flex items-center gap-1"><i class="fa-solid fa-server"></i> Server Connected</span>
+            <span id="status-filename" class="font-medium">No file selected</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span id="status-cursor">Ln 1, Col 1</span>
+            <span id="status-language" class="uppercase font-semibold">Plain Text</span>
+        </div>
+    </footer>
+
+    <!-- Prism.js Syntax Highlighting Script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+
+    <script>
+        // State
+        let serverFiles = [];
+        let loadedContents = {}; // Cache contents by filename
+        let activeFilename = null;
+        let openTabs = [];
+
+        // DOM Elements
+        const fileListEl = document.getElementById('file-list');
+        const tabBarEl = document.getElementById('tab-bar');
+        const codeEditor = document.getElementById('code-editor');
+        const codeDisplay = document.getElementById('code-display');
+        const lineNumbersEl = document.getElementById('line-numbers');
+        const statusFilename = document.getElementById('status-filename');
+        const statusLanguage = document.getElementById('status-language');
+        const statusCursor = document.getElementById('status-cursor');
+
+        // Language Helper
+        function getLanguage(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            switch (ext) {
+                case 'js': return 'javascript';
+                case 'py': return 'python';
+                case 'css': return 'css';
+                case 'html': return 'html';
+                case 'json': return 'json';
+                default: return 'plaintext';
+            }
+        }
+
+        // File Icon Helper
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            switch (ext) {
+                case 'js': return '<i class="fa-brands fa-js text-yellow-400"></i>';
+                case 'py': return '<i class="fa-brands fa-python text-blue-400"></i>';
+                case 'css': return '<i class="fa-brands fa-css3-alt text-blue-500"></i>';
+                case 'html': return '<i class="fa-brands fa-html5 text-orange-500"></i>';
+                case 'json': return '<i class="fa-solid fa-code text-green-400"></i>';
+                default: return '<i class="fa-regular fa-file text-gray-400"></i>';
+            }
+        }
+
+        // Fetch File List from Express Server
+        async function fetchServerFiles() {
+            try {
+                const res = await fetch('/api/files');
+                serverFiles = await res.json();
+                renderExplorer();
+            } catch (err) {
+                console.error('Failed to fetch files from server:', err);
+            }
+        }
+
+        // Fetch Single File Content from Server
+        async function fetchFileContent(filename) {
+            try {
+                const res = await fetch(`/api/files/${encodeURIComponent(filename)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    loadedContents[filename] = data.content;
+                    return data.content;
+                }
+            } catch (err) {
+                console.error('Error reading file:', err);
+            }
+            return '';
+        }
+
+        // Save File to Server
+        async function saveCurrentFileToServer() {
+            if (!activeFilename) return;
+
+            const content = codeEditor.value;
+            loadedContents[activeFilename] = content;
+
+            try {
+                const res = await fetch('/api/files', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: activeFilename, content })
+                });
+
+                if (res.ok) {
+                    statusFilename.textContent = `Saved ${activeFilename}!`;
+                    setTimeout(() => statusFilename.textContent = activeFilename, 1500);
+                }
+            } catch (err) {
+                alert('Failed to save file to server.');
+            }
+        }
+
+        // Create New File on Server
+        async function createNewServerFile() {
+            const filename = prompt('Enter filename (e.g., notes.txt, test.py):', 'untitled.txt');
+            if (!filename) return;
+
+            try {
+                const res = await fetch('/api/files', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename, content: '' })
+                });
+
+                if (res.ok) {
+                    await fetchServerFiles();
+                    openFile(filename);
+                } else {
+                    const err = await res.json();
+                    alert(err.error || 'Failed to create file.');
+                }
+            } catch (err) {
+                alert('Error creating file.');
+            }
+        }
+
+        // Rename File on Server
+        async function renameServerFile(filename, event) {
+            event.stopPropagation();
+            const newName = prompt('Enter new filename:', filename);
+            if (!newName || newName === filename) return;
+
+            try {
+                const res = await fetch(`/api/files/${encodeURIComponent(filename)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ newName })
+                });
+
+                if (res.ok) {
+                    if (loadedContents[filename] !== undefined) {
+                        loadedContents[newName] = loadedContents[filename];
+                        delete loadedContents[filename];
+                    }
+                    if (activeFilename === filename) activeFilename = newName;
+                    openTabs = openTabs.map(t => t === filename ? newName : t);
+                    
+                    await fetchServerFiles();
+                    renderTabs();
+                    updateEditor();
+                }
+            } catch (err) {
+                alert('Failed to rename file.');
+            }
+        }
+
+        // Delete File on Server
+        async function deleteServerFile(filename, event) {
+            event.stopPropagation();
+            if (!confirm(`Delete "${filename}" from server?`)) return;
+
+            try {
+                const res = await fetch(`/api/files/${encodeURIComponent(filename)}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    delete loadedContents[filename];
+                    openTabs = openTabs.filter(t => t !== filename);
+                    if (activeFilename === filename) {
+                        activeFilename = openTabs.length > 0 ? openTabs[openTabs.length - 1] : null;
+                    }
+                    await fetchServerFiles();
+                    renderTabs();
+                    updateEditor();
+                }
+            } catch (err) {
+                alert('Failed to delete file.');
+            }
+        }
+
+        // Open File in Tab/Editor
+        async function openFile(filename) {
+            activeFilename = filename;
+            if (!openTabs.includes(filename)) {
+                openTabs.push(filename);
+            }
+
+            if (loadedContents[filename] === undefined) {
+                await fetchFileContent(filename);
+            }
+
+            renderExplorer();
+            renderTabs();
+            updateEditor();
+        }
+
+        function closeTab(filename, event) {
+            event.stopPropagation();
+            openTabs = openTabs.filter(t => t !== filename);
+            if (activeFilename === filename) {
+                activeFilename = openTabs.length > 0 ? openTabs[openTabs.length - 1] : null;
+            }
+            renderExplorer();
+            renderTabs();
+            updateEditor();
+        }
+
+        // Render Explorer
+        function renderExplorer() {
+            fileListEl.innerHTML = '';
+            serverFiles.forEach(file => {
+                const item = document.createElement('div');
+                item.className = `flex items-center justify-between px-4 py-1 cursor-pointer hover:bg-vscode-hover group ${file.name === activeFilename ? 'bg-vscode-selected text-white' : 'text-vscode-text'}`;
+                item.innerHTML = `
+                    <div class="flex items-center space-x-2 truncate flex-1" onclick="openFile('${file.name}')">
+                        ${getFileIcon(file.name)}
+                        <span class="truncate">${file.name}</span>
+                    </div>
+                    <div class="hidden group-hover:flex items-center space-x-2">
+                        <button title="Rename" onclick="renameServerFile('${file.name}', event)" class="hover:text-yellow-400"><i class="fa-solid fa-pen text-xs"></i></button>
+                        <button title="Delete" onclick="deleteServerFile('${file.name}', event)" class="hover:text-red-400"><i class="fa-solid fa-trash text-xs"></i></button>
+                    </div>
+                `;
+                fileListEl.appendChild(item);
+            });
+        }
+
+        // Render Tabs
+        function renderTabs() {
+            tabBarEl.innerHTML = '';
+            openTabs.forEach(name => {
+                const tab = document.createElement('div');
+                tab.className = `h-full flex items-center space-x-2 px-3 border-r border-vscode-border text-xs cursor-pointer ${name === activeFilename ? 'bg-vscode-activeTab text-white border-t-2 border-t-blue-500' : 'bg-vscode-inactiveTab text-gray-400 hover:bg-vscode-hover'}`;
+                tab.innerHTML = `
+                    ${getFileIcon(name)}
+                    <span>${name}</span>
+                    <button onclick="closeTab('${name}', event)" class="hover:text-white rounded p-0.5"><i class="fa-solid fa-xmark"></i></button>
+                `;
+                tab.onclick = () => openFile(name);
+                tabBarEl.appendChild(tab);
+            });
+        }
+
+        // Synchronize Lines & Syntax Highlighting
+        function updateEditor() {
+            if (!activeFilename) {
+                codeEditor.value = '';
+                codeDisplay.textContent = '';
+                lineNumbersEl.innerHTML = '1';
+                statusFilename.textContent = 'No file selected';
+                statusLanguage.textContent = '-';
+                return;
+            }
+
+            const content = loadedContents[activeFilename] || '';
+            codeEditor.value = content;
+            const lang = getLanguage(activeFilename);
+            codeDisplay.className = `language-${lang}`;
+            codeDisplay.textContent = content;
+            Prism.highlightElement(codeDisplay);
+
+            const lines = content.split('\n').length;
+            lineNumbersEl.innerHTML = Array.from({ length: lines }, (_, i) => i + 1).join('<br>');
+
+            statusFilename.textContent = activeFilename;
+            statusLanguage.textContent = lang;
+        }
+
+        // Scroll Sync
+        codeEditor.addEventListener('scroll', () => {
+            codeDisplay.parentElement.scrollTop = codeEditor.scrollTop;
+            codeDisplay.parentElement.scrollLeft = codeEditor.scrollLeft;
+            lineNumbersEl.scrollTop = codeEditor.scrollTop;
+        });
+
+        // Local Edit Input
+        codeEditor.addEventListener('input', () => {
+            if (activeFilename) {
+                loadedContents[activeFilename] = codeEditor.value;
+                const lang = getLanguage(activeFilename);
+                codeDisplay.className = `language-${lang}`;
+                codeDisplay.textContent = codeEditor.value;
+                Prism.highlightElement(codeDisplay);
+
+                const lines = codeEditor.value.split('\n').length;
+                lineNumbersEl.innerHTML = Array.from({ length: lines }, (_, i) => i + 1).join('<br>');
+            }
+        });
+
+        // Cursor Info
+        codeEditor.addEventListener('keyup', updateCursorInfo);
+        codeEditor.addEventListener('click', updateCursorInfo);
+
+        function updateCursorInfo() {
+            const pos = codeEditor.selectionStart;
+            const textLines = codeEditor.value.substring(0, pos).split('\n');
+            const line = textLines.length;
+            const col = textLines[textLines.length - 1].length + 1;
+            statusCursor.textContent = `Ln ${line}, Col ${col}`;
+        }
+
+        // Shortcut: Ctrl + S
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                saveCurrentFileToServer();
+            }
+        });
+
+        // Event Listeners
+        document.getElementById('save-btn').addEventListener('click', saveCurrentFileToServer);
+        document.getElementById('btn-new-file').addEventListener('click', createNewServerFile);
+        document.getElementById('explorer-new-btn').addEventListener('click', createNewServerFile);
+        document.getElementById('btn-refresh').addEventListener('click', fetchServerFiles);
+        document.getElementById('explorer-refresh-btn').addEventListener('click', fetchServerFiles);
+
+        // Init
+        fetchServerFiles();
+    </script>
+</body>
+</html>
